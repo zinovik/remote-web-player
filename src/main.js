@@ -109,7 +109,7 @@ const getPage = () => `<!DOCTYPE html>
     <button onclick="handleVolumeClick(100)">Volume 100%</button>
   </div>
 
-  <div style="height: 40px;"></div>
+  <div style="height: 100px;"></div>
 
   ${filePaths
     .map(
