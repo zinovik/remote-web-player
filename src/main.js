@@ -3,6 +3,7 @@
 const { exec } = require("child_process");
 const { promisify } = require("util");
 const express = require("express");
+const bodyParser = require("body-parser");
 const ngrok = require("ngrok");
 
 const SOURCE_PATH = "/media/max/Windows/music";
@@ -42,8 +43,15 @@ const getPage = () => `<!DOCTYPE html>
   <script>
     const password = prompt('Password');
     const clickHandler = async (fileShortPathBase64) => {
-      const response = await fetch('/' + fileShortPathBase64, { headers: { authorization: password } });
-      if (response.status >= 300) alert('error');
+      const response = await fetch('/', {
+        method: 'POST',
+        headers: {
+          authorization: password,
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ file: fileShortPathBase64 }),
+      });
+      if (response.status >= 300) alert(await response.json());
     }
   </script>
   ${[STOP, ...filePaths]
@@ -56,7 +64,7 @@ const getPage = () => `<!DOCTYPE html>
         ${fileShortPath}
       </div>`;
     })
-    .join("\n")}
+    .join("\n<hr />\n")}
   </body>
 </html>`;
 
@@ -68,6 +76,7 @@ const startSong = (filePath) => {
   controller = new AbortController();
   const { signal } = controller;
 
+  console.log(`🟩 START SONG: ${filePath}`);
   exec(
     `mplayer "${filePath}"`,
     {
@@ -85,25 +94,24 @@ const startSong = (filePath) => {
 };
 
 const stopSong = () => {
+  console.log("🟥 STOP SONG");
   if (controller) controller.abort();
 };
 
 const app = express();
+app.use(bodyParser.json());
 
 app.get("/", (_, res) => {
   res.send(getPage());
 });
 
-app.get("/:fileShortPathBase64", (req, res) => {
+app.post("/", (req, res) => {
   if (req.headers.authorization !== PASSWORD)
-    return res.status(400).send("error");
+    return res.status(401).send('"wrong password"');
 
-  const fileShortPath = Buffer.from(
-    req.params.fileShortPathBase64,
-    "base64"
-  ).toString("UTF-8");
+  const fileShortPath = Buffer.from(req.body.file, "base64").toString("UTF-8");
 
-  console.log(fileShortPath);
+  console.log(`🔵 REQUEST: ${fileShortPath}`);
 
   if (fileShortPath === STOP) {
     stopSong();
@@ -114,7 +122,8 @@ app.get("/:fileShortPathBase64", (req, res) => {
     /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&() ]+\/\d\d - [A-zА-яЁё\d\-\[\]&() ]+.mp3/
   );
 
-  if (!regExp.test(fileShortPath)) return res.status(400).send("error");
+  if (!regExp.test(fileShortPath))
+    return res.status(400).send('"suspicious request"');
 
   startSong(`${SOURCE_PATH}/${fileShortPath}`);
 
