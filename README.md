@@ -1,3 +1,3 @@
-# audio-player-server
+# web-player-server
 
-npx audio-player-server PASSWORD
+npx web-player-server PASSWORD
