@@ -163,13 +163,13 @@ app.get("/", (_, res) => {
   res.send(getPage());
 });
 
-app.post("/stop", (req, res) => {
+app.post("/stop", async (req, res) => {
+  console.log("🟦 STOP REQUEST");
+
   if (req.headers.authorization !== PASSWORD) {
     console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
   }
-
-  console.log("🟦 STOP REQUEST");
 
   stopSong();
 
@@ -177,12 +177,12 @@ app.post("/stop", (req, res) => {
 });
 
 app.post("/volume", async (req, res) => {
+  console.log("🔷 VOLUME REQUEST", req.body.volume);
+
   if (req.headers.authorization !== PASSWORD) {
     console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
   }
-
-  console.log("🔷 VOLUME REQUEST", req.body.volume);
 
   if (isNaN(req.body.volume) || req.body.volume > 100 || req.body.volume < 0)
     return res.status(400).send('"suspicious request"');
@@ -193,14 +193,14 @@ app.post("/volume", async (req, res) => {
 });
 
 app.post("/", (req, res) => {
+  console.log(`🔵 SONG REQUEST: ${req.body.file}`);
+
   if (req.headers.authorization !== PASSWORD) {
     console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
   }
 
   const fileShortPath = Buffer.from(req.body.file, "base64").toString("UTF-8");
-
-  console.log(`🔵 SONG REQUEST: ${fileShortPath}`);
 
   const regExp = new RegExp(
     /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+\/\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+.mp3/
@@ -211,6 +211,7 @@ app.post("/", (req, res) => {
     return res.status(400).send('"suspicious request"');
   }
 
+  // we don't wait for the song end here
   startSong(`${SOURCE_PATH}/${fileShortPath}`);
 
   res.send();
