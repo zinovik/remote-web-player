@@ -1,3 +1,3 @@
 # web-player-server
 
-npx web-player-server PASSWORD
+npx web-player-server password PASSWORD

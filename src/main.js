@@ -6,10 +6,19 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const ngrok = require("ngrok");
 
-if (!process.argv[2]) throw new Error("PASSWORD parameter is required!");
+const getCommandLineParameter = (processArgv, name) => {
+  const nameIndex = processArgv.indexOf(name);
 
-const SOURCE_PATH = process.argv[3] || "/media/max/Windows/music";
-const PORT = 3003;
+  return nameIndex > -1 ? processArgv[nameIndex + 1] : null;
+};
+
+const SOURCE_PATH =
+  getCommandLineParameter(process.argv, "source-path") ||
+  "/media/max/Windows/music";
+const PORT = getCommandLineParameter(process.argv, "port") || 3003;
+const PASSWORD = getCommandLineParameter(process.argv, "password");
+
+if (!PASSWORD) throw new Error("PASSWORD parameter is required!");
 
 const getPlayerCommand = (filePath) => `mplayer "${filePath}"`;
 const getVolumeCommand = (volume) => `amixer sset 'Master' ${volume}%`;
@@ -21,8 +30,6 @@ const runCommand = async (command, signal) => {
 
   return stdout;
 };
-
-const PASSWORD = process.argv[2];
 
 let filePaths;
 
@@ -118,8 +125,13 @@ const getPage = () => `<!DOCTYPE html>
 
 let controller = null;
 
-const startSong = async (filePath) => {
+const stopSong = () => {
+  console.log("🟥 STOP SONG");
   if (controller) controller.abort();
+};
+
+const startSong = async (filePath) => {
+  stopSong();
 
   controller = new AbortController();
 
@@ -132,14 +144,10 @@ const startSong = async (filePath) => {
     return;
   }
 
+  // run next song
   controller = null;
   const current = filePaths.indexOf(filePath);
   startSong(filePaths[current + 1]);
-};
-
-const stopSong = () => {
-  console.log("🟥 STOP SONG");
-  if (controller) controller.abort();
 };
 
 const setVolume = async (volume) => {
@@ -156,8 +164,10 @@ app.get("/", (_, res) => {
 });
 
 app.post("/stop", (req, res) => {
-  if (req.headers.authorization !== PASSWORD)
+  if (req.headers.authorization !== PASSWORD) {
+    console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
+  }
 
   console.log("🟦 STOP REQUEST");
 
@@ -167,10 +177,12 @@ app.post("/stop", (req, res) => {
 });
 
 app.post("/volume", async (req, res) => {
-  if (req.headers.authorization !== PASSWORD)
+  if (req.headers.authorization !== PASSWORD) {
+    console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
+  }
 
-  console.log("🔷 VOLUME REQUEST");
+  console.log("🔷 VOLUME REQUEST", req.body.volume);
 
   if (isNaN(req.body.volume) || req.body.volume > 100 || req.body.volume < 0)
     return res.status(400).send('"suspicious request"');
@@ -181,8 +193,10 @@ app.post("/volume", async (req, res) => {
 });
 
 app.post("/", (req, res) => {
-  if (req.headers.authorization !== PASSWORD)
+  if (req.headers.authorization !== PASSWORD) {
+    console.warn("wrong password", req.headers.authorization);
     return res.status(401).send('"wrong password"');
+  }
 
   const fileShortPath = Buffer.from(req.body.file, "base64").toString("UTF-8");
 
@@ -192,8 +206,10 @@ app.post("/", (req, res) => {
     /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+\/\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+.mp3/
   );
 
-  if (!regExp.test(fileShortPath))
+  if (!regExp.test(fileShortPath)) {
+    console.warn("suspicious request");
     return res.status(400).send('"suspicious request"');
+  }
 
   startSong(`${SOURCE_PATH}/${fileShortPath}`);
 
