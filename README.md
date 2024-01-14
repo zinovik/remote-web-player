@@ -1,3 +1,3 @@
 # audio-player-server
 
-ngrok http localhost:3001
+npx audio-player-server PASSWORD

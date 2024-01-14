@@ -9,6 +9,10 @@ const SOURCE_PATH = "/media/max/Windows/music";
 const PORT = 3003;
 const STOP = "STOP";
 
+if (!process.argv[2]) throw new Error("PASSWORD parameter is required!");
+
+const PASSWORD = process.argv[2];
+
 let filePaths;
 
 (async () => {
@@ -28,16 +32,20 @@ let filePaths;
   console.log(url);
 })();
 
-const getPage = () => `<html>
-<head>
+const getPage = () => `<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
   <script>
+    const password = prompt('Password');
     const clickHandler = async (fileShortPathBase64) => {
-      const response = await fetch('/' + fileShortPathBase64);
+      const response = await fetch('/' + fileShortPathBase64, { headers: { authorization: password } });
       if (response.status >= 300) alert('error');
     }
   </script>
-</head>
-  <body>
   ${[STOP, ...filePaths]
     .map((filePath) => {
       const fileShortPath = filePath.replace(`${SOURCE_PATH}/`, "");
@@ -87,21 +95,23 @@ app.get("/", (_, res) => {
 });
 
 app.get("/:fileShortPathBase64", (req, res) => {
+  if (req.headers.authorization !== PASSWORD)
+    return res.status(400).send("error");
+
   const fileShortPath = Buffer.from(
     req.params.fileShortPathBase64,
     "base64"
-  ).toString("ascii");
+  ).toString("UTF-8");
 
   console.log(fileShortPath);
 
   if (fileShortPath === STOP) {
     stopSong();
-    res.send();
-    return;
+    return res.send();
   }
 
   const regExp = new RegExp(
-    /[A-z\d\-&() ]+\/\d\d\d\d - [A-z\d\-\[\]&() ]+\/\d\d - [A-z\d\-\[\]&() ]+.mp3/
+    /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&() ]+\/\d\d - [A-zА-яЁё\d\-\[\]&() ]+.mp3/
   );
 
   if (!regExp.test(fileShortPath)) return res.status(400).send("error");
