@@ -1,9 +1,13 @@
+#!/usr/bin/env node
+
 const { exec } = require("child_process");
 const { promisify } = require("util");
 const express = require("express");
+const ngrok = require("ngrok");
 
 const SOURCE_PATH = "/media/max/Windows/music";
-const PORT = 3001;
+const PORT = 3003;
+const STOP = "STOP";
 
 let filePaths;
 
@@ -19,21 +23,33 @@ let filePaths;
     .split("\n")
     .filter((filePath) => filePath.endsWith(".mp3"))
     .map((filePath) => filePath.substring(filePath.indexOf(SOURCE_PATH)));
+
+  const url = await ngrok.connect({ addr: PORT });
+  console.log(url);
 })();
 
 const getPage = () => `<html>
 <head>
+  <script>
+    const clickHandler = async (fileShortPathBase64) => {
+      const response = await fetch('/' + fileShortPathBase64);
+      if (response.status >= 300) alert('error');
+    }
+  </script>
 </head>
-<body>
-${filePaths
-  .map((filePath) => {
-    const fileShortPath = filePath.replace(`${SOURCE_PATH}/`, "");
-    const fileShortPathBase64 = Buffer.from(fileShortPath).toString("base64");
+  <body>
+  ${[STOP, ...filePaths]
+    .map((filePath) => {
+      const fileShortPath = filePath.replace(`${SOURCE_PATH}/`, "");
 
-    return `<div><a href="/${fileShortPathBase64}=">${fileShortPath}</a></div>`;
-  })
-  .join("\n")}
-</body>
+      return `<div onClick="clickHandler('${Buffer.from(fileShortPath).toString(
+        "base64"
+      )}')" style="cursor: pointer;">
+        ${fileShortPath}
+      </div>`;
+    })
+    .join("\n")}
+  </body>
 </html>`;
 
 let controller = null;
@@ -60,9 +76,13 @@ const startSong = (filePath) => {
   );
 };
 
+const stopSong = () => {
+  if (controller) controller.abort();
+};
+
 const app = express();
 
-app.get("/", (req, res) => {
+app.get("/", (_, res) => {
   res.send(getPage());
 });
 
@@ -72,15 +92,23 @@ app.get("/:fileShortPathBase64", (req, res) => {
     "base64"
   ).toString("ascii");
 
+  console.log(fileShortPath);
+
+  if (fileShortPath === STOP) {
+    stopSong();
+    res.send();
+    return;
+  }
+
   const regExp = new RegExp(
-    /[a-zA-Z\d\-() ]+\/\d\d\d\d - [a-zA-Z\d\-() ]+\/\d\d - [a-zA-Z\d\-() ]+.mp3/
+    /[A-z\d\-&() ]+\/\d\d\d\d - [A-z\d\-\[\]&() ]+\/\d\d - [A-z\d\-\[\]&() ]+.mp3/
   );
 
-  if (!regExp.test(fileShortPath)) return res.send("error");
+  if (!regExp.test(fileShortPath)) return res.status(400).send("error");
 
   startSong(`${SOURCE_PATH}/${fileShortPath}`);
 
-  res.send(getPage());
+  res.send();
 });
 
 app.listen(PORT, () => {
