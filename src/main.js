@@ -119,7 +119,7 @@ app.post("/", (req, res) => {
   }
 
   const regExp = new RegExp(
-    /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&() ]+\/\d\d - [A-zА-яЁё\d\-\[\]&() ]+.mp3/
+    /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&(), ]+\/\d\d - [A-zА-яЁё\d\-\[\]&(), ]+.mp3/
   );
 
   if (!regExp.test(fileShortPath))
