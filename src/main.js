@@ -42,7 +42,7 @@ let filePaths;
     .map((filePath) => filePath.substring(filePath.indexOf(SOURCE_PATH)));
 
   const url = await ngrok.connect({ addr: PORT });
-  console.log(url);
+  console.log(`${url}?password=${PASSWORD}`);
 })();
 
 const getPage = () => `<!DOCTYPE html>
@@ -53,7 +53,8 @@ const getPage = () => `<!DOCTYPE html>
 
   <body>
   <script>
-    const password = prompt('Password');
+    const urlParams = new URLSearchParams(window.location.search);
+    const password = urlParams.get('password');
 
     const handleSongClick = async (element) => {
       const elementText = element.innerHTML.trim();
@@ -71,6 +72,8 @@ const getPage = () => `<!DOCTYPE html>
       if (response.status >= 300) alert(await response.json());
 
       element.style.color = "blue";
+      const labelElement = document.getElementById('last-song');
+      if (element) labelElement.innerHTML = 'Last song: ' + elementText;
     }
 
     const handleStopClick = async () => {
@@ -91,10 +94,14 @@ const getPage = () => `<!DOCTYPE html>
         body: JSON.stringify({ volume: Number(volume) }),
       });
       if (response.status >= 300) alert(await response.json());
+      const labelElement = document.getElementById('last-volume');
+      if (labelElement) labelElement.innerHTML = 'Last volume: ' + volume;
     };
   </script>
 
-  <div style="position: fixed;">
+  <div style="position: fixed; background-color: lightgrey">
+    <div id="last-volume">Last volume: </div>
+    <div id="last-song">Last song: </div>
     <button onclick="handleStopClick()">STOP</button>
     <button onclick="handleVolumeClick(0)">Volume 0%</button>
     <button onclick="handleVolumeClick(10)">Volume 10%</button>
@@ -126,11 +133,15 @@ const getPage = () => `<!DOCTYPE html>
 let controller = null;
 
 const stopSong = () => {
-  console.log("🟥 STOP SONG");
-  if (controller) controller.abort();
+  if (controller) {
+    console.log("🟥 STOP SONG");
+    controller.abort();
+  }
 };
 
-const startSong = async (filePath) => {
+const startSong = async (filePathInput) => {
+  const filePath = filePathInput.replaceAll("&amp;", "&");
+
   stopSong();
 
   controller = new AbortController();
