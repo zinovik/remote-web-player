@@ -16,9 +16,13 @@ const SOURCE_PATH =
   getCommandLineParameter(process.argv, "source-path") ||
   "/media/max/Windows/music";
 const PORT = getCommandLineParameter(process.argv, "port") || 3003;
-const PASSWORD = getCommandLineParameter(process.argv, "password");
 
-if (!PASSWORD) throw new Error("PASSWORD parameter is required!");
+// "security"
+const PASSWORD =
+  Math.random().toString(36).slice(-8) +
+  Math.random().toString(36).slice(-8) +
+  Math.random().toString(36).slice(-8) +
+  Math.random().toString(36).slice(-8);
 
 const getPlayerCommand = (filePath) => `mplayer "${filePath}"`;
 const getVolumeCommand = (volume) => `amixer sset 'Master' ${volume}%`;
