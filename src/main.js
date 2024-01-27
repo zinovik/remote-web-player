@@ -3,7 +3,6 @@
 const { exec } = require("child_process");
 const { promisify } = require("util");
 const express = require("express");
-const bodyParser = require("body-parser");
 const ngrok = require("ngrok");
 
 const getCommandLineParameter = (processArgv, name) => {
@@ -17,13 +16,6 @@ const SOURCE_PATH =
   "/media/max/Windows/music";
 const PORT = getCommandLineParameter(process.argv, "port") || 3003;
 
-// "security"
-const PASSWORD =
-  Math.random().toString(36).slice(-8) +
-  Math.random().toString(36).slice(-8) +
-  Math.random().toString(36).slice(-8) +
-  Math.random().toString(36).slice(-8);
-
 const getPlayerCommand = (filePath) => `mplayer "${filePath}"`;
 const getVolumeCommand = (volume) => `amixer sset 'Master' ${volume}%`;
 const runCommand = async (command, signal) => {
@@ -36,6 +28,9 @@ const runCommand = async (command, signal) => {
 };
 
 let filePaths;
+let currentController = null;
+let currentSongIndex = 0;
+let currentVolume;
 
 (async () => {
   const treeOutput = await runCommand(`tree ${SOURCE_PATH} -f`);
@@ -46,7 +41,7 @@ let filePaths;
     .map((filePath) => filePath.substring(filePath.indexOf(SOURCE_PATH)));
 
   const url = await ngrok.connect({ addr: PORT });
-  console.log(`${url}?password=${PASSWORD}`);
+  console.log(url);
 })();
 
 const getPage = () => `<!DOCTYPE html>
@@ -57,56 +52,56 @@ const getPage = () => `<!DOCTYPE html>
 
   <body>
   <script>
-    const urlParams = new URLSearchParams(window.location.search);
-    const password = urlParams.get('password');
+    const updateCurrentInfo = (currentSongIndex, currentVolume) => {
+      const songElement = document.getElementById('song-' + currentSongIndex);
+      if (songElement) {
+        songElement.style.color = 'blue';
+        const currentSong = songElement.innerHTML;
+        const currentSongElement = document.getElementById('current-song');
+        if (currentSongElement) currentSongElement.innerHTML = 'Current song: ' + currentSong;
+      }
 
-    const handleSongClick = async (element) => {
-      const elementText = element.innerHTML.trim();
-      const bytes = new TextEncoder().encode(elementText);
-      const fileShortPathBase64 = btoa(String.fromCodePoint(...bytes));
+      const currentVolumeElement = document.getElementById('current-volume');
+      if (currentVolumeElement) currentVolumeElement.innerHTML = 'Current volume: ' + currentVolume;
+    };
 
-      const response = await fetch('/', {
-        method: 'POST',
-        headers: {
-          authorization: password,
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({ file: fileShortPathBase64 }),
-      });
-      if (response.status >= 300) alert(await response.json());
-
-      element.style.color = "blue";
-      const labelElement = document.getElementById('last-song');
-      if (element) labelElement.innerHTML = 'Last song: ' + elementText;
+    const handleSongClick = async (index, element) => {
+      const response = await fetch('/play/' + index);
+      const { currentSongIndex, currentVolume } = await response.json();
+      updateCurrentInfo(currentSongIndex, currentVolume);
     }
 
+    const handlePlayClick = async () => {
+      const response = await fetch('/play');
+      const { currentSongIndex, currentVolume } = await response.json();
+      updateCurrentInfo(currentSongIndex, currentVolume);
+    };
+
     const handleStopClick = async () => {
-      const response = await fetch('/stop', {
-        method: 'POST',
-        headers: { authorization: password },
-      });
-      if (response.status >= 300) alert(await response.json());
+      const response = await fetch('/stop');
+      const { currentSongIndex, currentVolume } = await response.json();
+      updateCurrentInfo(currentSongIndex, currentVolume);
+    };
+
+    const handleRandomClick = async () => {
+      const response = await fetch('/random');
+      const { currentSongIndex, currentVolume } = await response.json();
+      updateCurrentInfo(currentSongIndex, currentVolume);
     };
 
     const handleVolumeClick = async (volume) => {
-      const response = await fetch('/volume', {
-        method: 'POST',
-        headers: {
-          authorization: password,
-          'content-type': 'application/json'
-        },
-        body: JSON.stringify({ volume: Number(volume) }),
-      });
-      if (response.status >= 300) alert(await response.json());
-      const labelElement = document.getElementById('last-volume');
-      if (labelElement) labelElement.innerHTML = 'Last volume: ' + volume;
+      const response = await fetch('/volume/' + volume);
+      const { currentSongIndex, currentVolume } = await response.json();
+      updateCurrentInfo(currentSongIndex, currentVolume);
     };
   </script>
 
   <div style="position: fixed; background-color: lightgrey">
-    <div id="last-volume">Last volume: </div>
-    <div id="last-song">Last song: </div>
+    <div id="current-song">Current song: </div>
+    <div id="current-volume">Current volume: </div>
+    <button onclick="handlePlayClick()">PLAY</button>
     <button onclick="handleStopClick()">STOP</button>
+    <button onclick="handleRandomClick()">RANDOM</button>
     <button onclick="handleVolumeClick(0)">Volume 0%</button>
     <button onclick="handleVolumeClick(10)">Volume 10%</button>
     <button onclick="handleVolumeClick(20)">Volume 20%</button>
@@ -124,8 +119,8 @@ const getPage = () => `<!DOCTYPE html>
 
   ${filePaths
     .map(
-      (filePath) =>
-        `<div onClick="handleSongClick(this)" style="cursor: pointer;">${filePath.replace(
+      (filePath, index) =>
+        `<div onClick="handleSongClick(${index})" style="cursor: pointer;" id="song-${index}">${filePath.replace(
           `${SOURCE_PATH}/`,
           ""
         )}</div>`
@@ -134,102 +129,80 @@ const getPage = () => `<!DOCTYPE html>
   </body>
 </html>`;
 
-let controller = null;
-
 const stopSong = () => {
-  if (controller) {
+  if (currentController) {
     console.log("🟥 STOP SONG");
-    controller.abort();
+    currentController.abort();
   }
 };
 
-const startSong = async (filePathInput) => {
-  const filePath = filePathInput.replaceAll("&amp;", "&");
-
+const startSong = async () => {
   stopSong();
 
-  controller = new AbortController();
+  currentController = new AbortController();
+
+  const filePath = filePaths[currentSongIndex];
 
   console.log(`🟢 START SONG: ${filePath}`);
 
   try {
-    await runCommand(getPlayerCommand(filePath), controller.signal);
+    await runCommand(getPlayerCommand(filePath), currentController.signal);
   } catch (error) {
     // user set a new song
     return;
   }
 
   // run next song
-  controller = null;
-  const current = filePaths.indexOf(filePath);
-  startSong(filePaths[current + 1]);
+  currentController = null;
+  currentSongIndex = currentSongIndex + 1;
+  startSong();
 };
 
-const setVolume = async (volume) => {
-  console.log("🟡 SET VOLUME", volume);
-
-  await runCommand(getVolumeCommand(volume));
+const setVolume = async () => {
+  console.log("🟡 SET VOLUME", currentVolume);
+  await runCommand(getVolumeCommand(currentVolume));
 };
 
 const app = express();
-app.use(bodyParser.json());
 
 app.get("/", (_, res) => {
   res.send(getPage());
 });
 
-app.post("/stop", async (req, res) => {
+app.get("/stop", (_req, res) => {
   console.log("🟦 STOP REQUEST");
-
-  if (req.headers.authorization !== PASSWORD) {
-    console.warn("wrong password", req.headers.authorization);
-    return res.status(401).send('"wrong password"');
-  }
-
   stopSong();
-
-  res.send();
+  res.send({ currentSongIndex, currentVolume });
 });
 
-app.post("/volume", async (req, res) => {
-  console.log("🔷 VOLUME REQUEST", req.body.volume);
-
-  if (req.headers.authorization !== PASSWORD) {
-    console.warn("wrong password", req.headers.authorization);
-    return res.status(401).send('"wrong password"');
-  }
-
-  if (isNaN(req.body.volume) || req.body.volume > 100 || req.body.volume < 0)
-    return res.status(400).send('"suspicious request"');
-
-  await setVolume(req.body.volume);
-
-  res.send();
+app.get("/volume/:volume", async (req, res) => {
+  currentVolume = Number(req.params.volume);
+  console.log("🔷 VOLUME REQUEST", currentVolume);
+  await setVolume();
+  res.send({ currentSongIndex, currentVolume });
 });
 
-app.post("/", (req, res) => {
-  console.log(`🔵 SONG REQUEST: ${req.body.file}`);
-
-  if (req.headers.authorization !== PASSWORD) {
-    console.warn("wrong password", req.headers.authorization);
-    return res.status(401).send('"wrong password"');
-  }
-
-  const fileShortPath = Buffer.from(req.body.file, "base64").toString("UTF-8");
-
-  const regExp = new RegExp(
-    /[A-zА-яЁё\d\-&() ]+\/\d\d\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+\/\d\d - [A-zА-яЁё\d\-\[\]&(),! ]+.mp3/
-  );
-
-  if (!regExp.test(fileShortPath)) {
-    console.warn("suspicious request");
-    return res.status(400).send('"suspicious request"');
-  }
-
+app.get("/play/:songIndex", (req, res) => {
+  currentSongIndex = Number(req.params.songIndex);
+  console.log("🔵 PLAY REQUEST", currentSongIndex);
   // we don't wait for the song end here
-  startSong(`${SOURCE_PATH}/${fileShortPath}`);
+  startSong();
+  res.send({ currentSongIndex, currentVolume });
+});
 
-  res.send();
+app.get("/random", (_req, res) => {
+  currentSongIndex = Math.floor(Math.random() * filePaths.length);
+  console.log("🔵 RANDOM REQUEST", currentSongIndex);
+  // we don't wait for the song end here
+  startSong();
+  res.send({ currentSongIndex, currentVolume });
+});
+
+app.get("/play", (req, res) => {
+  console.log("🔵 PLAY REQUEST", currentSongIndex);
+  // we don't wait for the song end here
+  startSong();
+  res.send({ currentSongIndex, currentVolume });
 });
 
 app.listen(PORT, () => {
