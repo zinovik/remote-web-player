@@ -98,7 +98,6 @@ const getPage = () => `<!DOCTYPE html>
       updateCurrentInfo(currentSongIndex, currentVolume);
     };
 
-    setInterval(() => getInfo(), 60 * 1000);
     getInfo();
   </script>
 
