@@ -4,6 +4,7 @@ const { exec } = require("child_process");
 const { promisify } = require("util");
 const express = require("express");
 const ngrok = require("ngrok");
+const musicMetadata = require("music-metadata");
 
 const getCommandLineParameter = (processArgv, name) => {
   const nameIndex = processArgv.indexOf(name);
@@ -27,18 +28,66 @@ const runCommand = async (command, signal) => {
   return stdout;
 };
 
-let filePaths;
-let currentController = null;
-let currentSongIndex = 0;
-let currentVolume;
+const globalMutableState = {
+  files: [],
+  currentController: null,
+  currentSongIndex: 0,
+  currentVolume: null,
+};
+
+const getTimeAndGenre = (path) => {
+  return new Promise((resolve, reject) =>
+    musicMetadata
+      .parseFile(path)
+      .then((metadata) =>
+        resolve({
+          genre: (metadata.common.genre || []).join(", "),
+          duration:
+            String(Math.floor((metadata.format.duration || 0) / 60)) +
+            ":" +
+            String(Math.round((metadata.format.duration || 0) % 60)).padStart(
+              2,
+              "0"
+            ),
+        })
+      )
+      .catch(() =>
+        resolve({
+          genre: "unknown",
+          duration: 0,
+        })
+      )
+  );
+};
 
 (async () => {
   const treeOutput = await runCommand(`tree ${SOURCE_PATH} -f`);
 
-  filePaths = treeOutput
-    .split("\n")
-    .filter((filePath) => filePath.endsWith(".mp3"))
-    .map((filePath) => filePath.substring(filePath.indexOf(SOURCE_PATH)));
+  console.log("Scanning music collection...");
+
+  globalMutableState.files = await Promise.all(
+    treeOutput
+      .split("\n")
+      .filter((filePath) => filePath.endsWith(".mp3"))
+      .map(async (filePath) => {
+        const path = filePath.substring(filePath.indexOf(SOURCE_PATH));
+        const filename = path.replace(`${SOURCE_PATH}/`, "");
+        const [artist, yearAndAlbum, song] = filename.split("/");
+        const year = yearAndAlbum.substring(0, 4);
+        const album = yearAndAlbum.substring(6, yearAndAlbum.length);
+        const songNumber = song.substring(0, 2);
+
+        return {
+          path,
+          artist,
+          year,
+          album,
+          song: song.replace(".mp3", ""),
+          isFirstAlbumSong: songNumber === "01",
+          ...(await getTimeAndGenre(path)),
+        };
+      })
+  );
 
   const url = await ngrok.connect({ addr: PORT });
   console.log(url);
@@ -54,12 +103,16 @@ const getPage = () => `<!DOCTYPE html>
   <script>
     let lastSongIndex;
 
+    const scrollToTheCurrentSong = (songElement) => {
+      (songElement || document.getElementById('song-' + lastSongIndex)).scrollIntoView({ block: "center" });
+    };
+
     const updateCurrentInfo = (currentSongIndex, currentVolume) => {
       if (currentSongIndex !== lastSongIndex) {
         const songElement = document.getElementById('song-' + currentSongIndex);
         if (songElement) {
           songElement.style.color = 'blue';
-          songElement.scrollIntoView({ block: "center" });
+          scrollToTheCurrentSong(songElement);
           const currentSong = songElement.innerHTML;
           const currentSongElement = document.getElementById('current-song');
           if (currentSongElement) currentSongElement.innerHTML = 'Current song: ' + currentSong;
@@ -98,7 +151,7 @@ const getPage = () => `<!DOCTYPE html>
       updateCurrentInfo(currentSongIndex, currentVolume);
     };
 
-    getInfo();
+    setTimeout(() => getInfo(), 1000);
   </script>
 
   <div style="position: fixed; background-color: lightgrey">
@@ -120,54 +173,72 @@ const getPage = () => `<!DOCTYPE html>
     <button onclick="handleVolumeClick(80)">Volume 80%</button>
     <button onclick="handleVolumeClick(90)">Volume 90%</button>
     <button onclick="handleVolumeClick(100)">Volume 100%</button>
+    <button onclick="scrollToTheCurrentSong()">Scroll to the current song</button>
   </div>
 
-  <div style="height: 100px;"></div>
+  <div style="height: 170px;"></div>
 
-  ${filePaths
+  ${globalMutableState.files
     .map(
-      (filePath, index) =>
-        `<div onClick="handleSongClick(${index})" style="cursor: pointer;" id="song-${index}">${filePath.replace(
-          `${SOURCE_PATH}/`,
-          ""
-        )}</div>`
+      (
+        { artist, year, album, song, duration, genre, isFirstAlbumSong },
+        index
+      ) => {
+        const results = [];
+
+        if (isFirstAlbumSong) {
+          results.push(
+            `<hr /><div>${artist}</div><div>${album}</div><div>${year}</div><div>${genre}</div><hr />`
+          );
+        }
+
+        results.push(
+          `<div onClick="handleSongClick(${index})" style="cursor: pointer;" id="song-${index}">${duration} | ${song}</div>`
+        );
+
+        return results.join("");
+      }
     )
-    .join("\n<hr />\n")}
+    .join("")}
   </body>
 </html>`;
 
 const stopSong = () => {
-  if (currentController) {
+  if (globalMutableState.currentController) {
     console.log("🟥 STOP SONG");
-    currentController.abort();
+    globalMutableState.currentController.abort();
   }
 };
 
 const startSong = async () => {
   stopSong();
 
-  currentController = new AbortController();
+  globalMutableState.currentController = new AbortController();
 
-  const filePath = filePaths[currentSongIndex];
+  const filePath =
+    globalMutableState.files[globalMutableState.currentSongIndex].path;
 
   console.log(`🟢 START SONG: ${filePath}`);
 
   try {
-    await runCommand(getPlayerCommand(filePath), currentController.signal);
+    await runCommand(
+      getPlayerCommand(filePath),
+      globalMutableState.currentController.signal
+    );
   } catch (error) {
     // user set a new song
     return;
   }
 
   // run next song
-  currentController = null;
-  currentSongIndex = currentSongIndex + 1;
+  globalMutableState.currentController = null;
+  globalMutableState.currentSongIndex = globalMutableState.currentSongIndex + 1;
   startSong();
 };
 
 const setVolume = async () => {
-  console.log("🟡 SET VOLUME", currentVolume);
-  await runCommand(getVolumeCommand(currentVolume));
+  console.log("🟡 SET VOLUME", globalMutableState.currentVolume);
+  await runCommand(getVolumeCommand(globalMutableState.currentVolume));
 };
 
 const app = express();
@@ -177,60 +248,86 @@ app.get("/", (_, res) => {
 });
 
 app.get("/volume/:volume", async (req, res) => {
-  currentVolume = Number(req.params.volume);
-  console.log("🔷 VOLUME REQUEST", currentVolume);
+  globalMutableState.currentVolume = Number(req.params.volume);
+  console.log("🔷 VOLUME REQUEST", globalMutableState.currentVolume);
   await setVolume();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/play/:songIndex", (req, res) => {
-  currentSongIndex = Number(req.params.songIndex);
-  console.log("🔵 PLAY SONG REQUEST", currentSongIndex);
+  globalMutableState.currentSongIndex = Number(req.params.songIndex);
+  console.log("🔵 PLAY SONG REQUEST", globalMutableState.currentSongIndex);
   // we don't wait for the song end here
   startSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/play", (_req, res) => {
-  console.log("🔵 PLAY REQUEST", currentSongIndex);
+  console.log("🔵 PLAY REQUEST", globalMutableState.currentSongIndex);
   // we don't wait for the song end here
   startSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/stop", (_req, res) => {
   console.log("🟦 STOP REQUEST");
   stopSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/random", (_req, res) => {
-  currentSongIndex = Math.floor(Math.random() * filePaths.length);
-  console.log("🔵 RANDOM REQUEST", currentSongIndex);
+  globalMutableState.currentSongIndex = Math.floor(
+    Math.random() * globalMutableState.files.length
+  );
+  console.log("🔵 RANDOM REQUEST", globalMutableState.currentSongIndex);
   // we don't wait for the song end here
   startSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/next", (_req, res) => {
-  currentSongIndex = currentSongIndex + 1;
-  console.log("🔵 NEXT REQUEST", currentSongIndex);
+  globalMutableState.currentSongIndex = globalMutableState.currentSongIndex + 1;
+  console.log("🔵 NEXT REQUEST", globalMutableState.currentSongIndex);
   // we don't wait for the song end here
   startSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/previous", (_req, res) => {
-  currentSongIndex = currentSongIndex - 1;
-  console.log("🔵 PREVIOUS REQUEST", currentSongIndex);
+  globalMutableState.currentSongIndex = globalMutableState.currentSongIndex - 1;
+  console.log("🔵 PREVIOUS REQUEST", globalMutableState.currentSongIndex);
   // we don't wait for the song end here
   startSong();
-  res.send({ currentSongIndex, currentVolume });
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.get("/info", (_req, res) => {
-  console.log("🔵 INFO REQUEST", currentSongIndex);
-  res.send({ currentSongIndex, currentVolume });
+  console.log("🔵 INFO REQUEST", globalMutableState.currentSongIndex);
+  res.send({
+    currentSongIndex: globalMutableState.currentSongIndex,
+    currentVolume: globalMutableState.currentVolume,
+  });
 });
 
 app.listen(PORT, () => {
