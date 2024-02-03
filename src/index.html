@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  </head>
+
+  <body>
+    <script>
+      const files = [];
+      let lastSongIndex;
+
+      const updateCurrentInfo = (currentSongIndex, currentVolume) => {
+        const currentSong = files[currentSongIndex];
+        const currentSongElement = document.getElementById("current-song");
+        if (currentSongElement && files[currentSongIndex]) {
+          const { track, artist, title, album, year, genre } = currentSong;
+          currentSongElement.innerHTML = `Current song: (${track}) ${artist} - ${title} [${album} (${year})] || ${genre}`;
+        }
+
+        const currentVolumeElement = document.getElementById("current-volume");
+        if (currentVolumeElement)
+          currentVolumeElement.innerHTML = `Current volume: ${currentVolume}`;
+
+        const songElement = document.getElementById(`song-${currentSongIndex}`);
+        if (songElement) {
+          songElement.style.color = "blue";
+          songElement.scrollIntoView({ block: "center" });
+
+          if (currentSongIndex !== lastSongIndex) {
+            const lastSongElement = document.getElementById(
+              `song-${lastSongIndex}`
+            );
+            if (lastSongElement) lastSongElement.style.color = "black";
+          }
+        }
+
+        lastSongIndex = currentSongIndex;
+      };
+
+      const handleSongClick = async (index, element) => {
+        const response = await fetch(`/play/${index}`);
+        const { currentSongIndex, currentVolume } = await response.json();
+        updateCurrentInfo(currentSongIndex, currentVolume);
+      };
+
+      const handleVolumeClick = async (volume) => {
+        const response = await fetch(`/volume/${volume}`);
+        const { currentSongIndex, currentVolume } = await response.json();
+        updateCurrentInfo(currentSongIndex, currentVolume);
+      };
+
+      const handleClick = async (path) => {
+        const response = await fetch(`/${path}`);
+        const { currentSongIndex, currentVolume } = await response.json();
+        updateCurrentInfo(currentSongIndex, currentVolume);
+      };
+
+      const getInfoClick = async () => {
+        const response = await fetch("/info");
+        const { currentSongIndex, currentVolume } = await response.json();
+        updateCurrentInfo(currentSongIndex, currentVolume);
+      };
+
+      setTimeout(() => getInfoClick(), 1000);
+    </script>
+
+    <div style="position: fixed; background-color: lightgrey">
+      <div id="current-song">Current song:</div>
+      <div id="current-volume">Current volume:</div>
+      <button onclick="handleClick('play')">PLAY</button>
+      <button onclick="handleClick('stop')">STOP</button>
+      <button onclick="handleClick('random')">RANDOM</button>
+      <button onclick="handleClick('next')">NEXT</button>
+      <button onclick="handleClick('previous')">PREVIOUS</button>
+      <button onclick="handleVolumeClick(0)">Volume 0%</button>
+      <button onclick="handleVolumeClick(10)">Volume 10%</button>
+      <button onclick="handleVolumeClick(20)">Volume 20%</button>
+      <button onclick="handleVolumeClick(30)">Volume 30%</button>
+      <button onclick="handleVolumeClick(40)">Volume 40%</button>
+      <button onclick="handleVolumeClick(50)">Volume 50%</button>
+      <button onclick="handleVolumeClick(60)">Volume 60%</button>
+      <button onclick="handleVolumeClick(70)">Volume 70%</button>
+      <button onclick="handleVolumeClick(80)">Volume 80%</button>
+      <button onclick="handleVolumeClick(90)">Volume 90%</button>
+      <button onclick="handleVolumeClick(100)">Volume 100%</button>
+      <button onclick="getInfoClick()">INFO</button>
+    </div>
+
+    <div style="height: 170px"></div>
+
+    <div>SONG LIST PLACEHOLDER</div>
+  </body>
+</html>
