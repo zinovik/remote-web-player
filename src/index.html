@@ -14,12 +14,12 @@
         const currentSongElement = document.getElementById("current-song");
         if (currentSongElement && files[currentSongIndex]) {
           const { track, artist, title, album, year, genre } = currentSong;
-          currentSongElement.innerHTML = `Current song: (${track}) ${artist} - ${title} [${album} (${year})] || ${genre}`;
+          currentSongElement.innerHTML = `(${track}) ${artist} - ${title} [${album} (${year})] || ${genre}`;
         }
 
         const currentVolumeElement = document.getElementById("current-volume");
         if (currentVolumeElement)
-          currentVolumeElement.innerHTML = `Current volume: ${currentVolume}`;
+          currentVolumeElement.innerHTML = `Volume: ${currentVolume}`;
 
         const songElement = document.getElementById(`song-${currentSongIndex}`);
         if (songElement) {
@@ -65,8 +65,8 @@
     </script>
 
     <div style="position: fixed; background-color: lightgrey">
-      <div id="current-song">Current song:</div>
-      <div id="current-volume">Current volume:</div>
+      <div id="current-song"></div>
+      <div id="current-volume">Volume:</div>
       <button onclick="handleClick('play')">PLAY</button>
       <button onclick="handleClick('stop')">STOP</button>
       <button onclick="handleClick('random')">RANDOM</button>

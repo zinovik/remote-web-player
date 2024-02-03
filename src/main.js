@@ -43,7 +43,7 @@ const getTimeAndGenre = (path) => {
       .parseFile(path)
       .then((metadata) =>
         resolve({
-          genre: (metadata.common.genre || []).join(", "),
+          genre: (metadata.common.genre || []).join("/"),
           duration:
             String(Math.floor((metadata.format.duration || 0) / 60)) +
             ":" +
