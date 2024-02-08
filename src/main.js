@@ -54,7 +54,10 @@ const getTimeAndGenre = (path) => {
         })
       )
       .catch(() => {
-        console.warn("Error reading metadata", path);
+        console.warn(
+          `${new Date().toISOString()}: Error reading metadata`,
+          path
+        );
         resolve({
           genre: "unknown",
           duration: 0,
@@ -66,7 +69,7 @@ const getTimeAndGenre = (path) => {
 (async () => {
   const treeOutput = await runCommand(`tree ${SOURCE_PATH} -f`);
 
-  console.log("Scanning music collection...");
+  console.log(`${new Date().toISOString()}: Scanning music collection...`);
 
   globalMutableState.files = await Promise.all(
     treeOutput
@@ -96,7 +99,7 @@ const getTimeAndGenre = (path) => {
       })
   );
 
-  console.log("Scanning done");
+  console.log(`${new Date().toISOString()}: Scanning done`);
 
   globalMutableState.page = fs
     .readFileSync(`${__dirname}/index.html`)
@@ -141,13 +144,13 @@ const getTimeAndGenre = (path) => {
     );
 
   const url = await ngrok.connect({ addr: PORT });
-  console.log(url);
+  console.log(`${new Date().toISOString()}: ${url}`);
 })();
 
 const stopSong = () => {
   if (!globalMutableState.currentController) return;
 
-  console.log("🟥 STOP SONG");
+  console.log(`${new Date().toISOString()}: 🟥 STOP SONG`);
   globalMutableState.currentController.abort();
 };
 
@@ -159,7 +162,7 @@ const startSong = async () => {
   const filePath =
     globalMutableState.files[globalMutableState.currentSongIndex].path;
 
-  console.log(`🟢 START SONG: ${filePath}`);
+  console.log(`${new Date().toISOString()}: 🟢 START SONG: ${filePath}`);
 
   try {
     await runCommand(
@@ -178,7 +181,10 @@ const startSong = async () => {
 };
 
 const setVolume = async () => {
-  console.log("🟡 SET VOLUME", globalMutableState.currentVolume);
+  console.log(
+    `${new Date().toISOString()}: 🟡 SET VOLUME`,
+    globalMutableState.currentVolume
+  );
   await runCommand(getVolumeCommand(globalMutableState.currentVolume));
 };
 
@@ -190,7 +196,10 @@ app.get("/", (_, res) => {
 
 app.get("/volume/:volume", async (req, res) => {
   globalMutableState.currentVolume = Number(req.params.volume);
-  console.log("🔷 VOLUME REQUEST", globalMutableState.currentVolume);
+  console.log(
+    `${new Date().toISOString()}: 🔷 VOLUME REQUEST`,
+    globalMutableState.currentVolume
+  );
   await setVolume();
   res.send({
     currentSongIndex: globalMutableState.currentSongIndex,
@@ -200,7 +209,10 @@ app.get("/volume/:volume", async (req, res) => {
 
 app.get("/play/:songIndex", (req, res) => {
   globalMutableState.currentSongIndex = Number(req.params.songIndex);
-  console.log("🔵 PLAY SONG REQUEST", globalMutableState.currentSongIndex);
+  console.log(
+    `${new Date().toISOString()}: 🔵 PLAY SONG REQUEST`,
+    globalMutableState.currentSongIndex
+  );
   // we don't wait for the song end here
   startSong();
   res.send({
@@ -210,7 +222,10 @@ app.get("/play/:songIndex", (req, res) => {
 });
 
 app.get("/play", (_req, res) => {
-  console.log("🔵 PLAY REQUEST", globalMutableState.currentSongIndex);
+  console.log(
+    `${new Date().toISOString()}: 🔵 PLAY REQUEST`,
+    globalMutableState.currentSongIndex
+  );
   // we don't wait for the song end here
   startSong();
   res.send({
@@ -220,7 +235,7 @@ app.get("/play", (_req, res) => {
 });
 
 app.get("/stop", (_req, res) => {
-  console.log("🟦 STOP REQUEST");
+  console.log(`${new Date().toISOString()}: 🟦 STOP REQUEST`);
   stopSong();
   res.send({
     currentSongIndex: globalMutableState.currentSongIndex,
@@ -232,7 +247,10 @@ app.get("/random", (_req, res) => {
   globalMutableState.currentSongIndex = Math.floor(
     Math.random() * globalMutableState.files.length
   );
-  console.log("🔵 RANDOM REQUEST", globalMutableState.currentSongIndex);
+  console.log(
+    `${new Date().toISOString()}: 🔵 RANDOM REQUEST`,
+    globalMutableState.currentSongIndex
+  );
   // we don't wait for the song end here
   startSong();
   res.send({
@@ -243,7 +261,10 @@ app.get("/random", (_req, res) => {
 
 app.get("/next", (_req, res) => {
   globalMutableState.currentSongIndex = globalMutableState.currentSongIndex + 1;
-  console.log("🔵 NEXT REQUEST", globalMutableState.currentSongIndex);
+  console.log(
+    `${new Date().toISOString()}: 🔵 NEXT REQUEST`,
+    globalMutableState.currentSongIndex
+  );
   // we don't wait for the song end here
   startSong();
   res.send({
@@ -254,7 +275,10 @@ app.get("/next", (_req, res) => {
 
 app.get("/previous", (_req, res) => {
   globalMutableState.currentSongIndex = globalMutableState.currentSongIndex - 1;
-  console.log("🔵 PREVIOUS REQUEST", globalMutableState.currentSongIndex);
+  console.log(
+    `${new Date().toISOString()}: 🔵 PREVIOUS REQUEST`,
+    globalMutableState.currentSongIndex
+  );
   // we don't wait for the song end here
   startSong();
   res.send({
@@ -264,7 +288,7 @@ app.get("/previous", (_req, res) => {
 });
 
 app.get("/info", (_req, res) => {
-  console.log("🔵 INFO REQUEST");
+  console.log(`${new Date().toISOString()}: 🔵 INFO REQUEST`);
   res.send({
     currentSongIndex: globalMutableState.currentSongIndex,
     currentVolume: globalMutableState.currentVolume,
@@ -272,5 +296,5 @@ app.get("/info", (_req, res) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`App listening on port ${PORT}`);
+  console.log(`${new Date().toISOString()}: App listening on port ${PORT}`);
 });
