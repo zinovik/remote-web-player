@@ -18,7 +18,7 @@ const SOURCE_PATH =
   "/media/max/Windows/music";
 const PORT = getCommandLineParameter(process.argv, "port") || 3003;
 
-const getPlayerCommand = (filePath) => `mplayer "${filePath}"`;
+const getPlayerCommand = (filePath) => `mplayer --volume "${filePath}"`;
 const getVolumeCommand = (volume) => `amixer sset 'Master' ${volume}%`;
 const runCommand = async (command, signal) => {
   const { stdout } = await promisify(exec)(command, {
