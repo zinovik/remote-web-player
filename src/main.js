@@ -4,7 +4,6 @@ const { exec } = require("child_process");
 const fs = require("fs");
 const { promisify } = require("util");
 const express = require("express");
-const ngrok = require("ngrok");
 const musicMetadata = require("music-metadata");
 
 const getCommandLineParameter = (processArgv, name) => {
@@ -67,6 +66,8 @@ const getTimeAndGenre = (path) => {
 };
 
 (async () => {
+  runCommand(`ngrok http ${PORT}`);
+
   const treeOutput = await runCommand(`tree ${SOURCE_PATH} -f`);
 
   console.log(`${new Date().toISOString()}: Scanning music collection...`);
@@ -143,8 +144,8 @@ const getTimeAndGenre = (path) => {
       )};`
     );
 
-  const url = await ngrok.connect({ addr: PORT });
-  console.log(`${new Date().toISOString()}: ${url}`);
+  const curlOutput = await runCommand('curl http://127.0.0.1:4040/api/tunnels');
+  console.log(`${new Date().toISOString()}: ${JSON.parse(curlOutput).tunnels[0].public_url}`);
 })();
 
 const stopSong = () => {
